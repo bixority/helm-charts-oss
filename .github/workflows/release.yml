@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout main branch
         uses: actions/checkout@v5
 
       - name: Set up Helm
@@ -28,19 +28,46 @@ jobs:
         run: |
           mkdir -p packaged
           for dir in charts/*/; do
-            helm lint "$dir"
-            helm package "$dir" -d packaged/
+            if [ -f "$dir/Chart.yaml" ]; then
+              echo "Packaging chart: $dir"
+              helm lint "$dir"
+              helm package "$dir" -d packaged/
+            fi
           done
 
-      - name: Rebuild Helm repo index
+      - name: Ensure gh-pages branch exists
         run: |
-          helm repo index packaged --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-          cp -r packaged/* .
+          if ! git ls-remote --exit-code origin gh-pages; then
+            echo "gh-pages branch not found. Creating it..."
+            git checkout --orphan gh-pages
+            git rm -rf .
+            echo "Helm repository branch" > README.md
+            git add README.md
+            git commit -m "Initialize gh-pages branch"
+            git push origin gh-pages
+            git checkout main
+          else
+            echo "gh-pages branch already exists."
+          fi
 
-      - name: Commit and push changes
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v5
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Copy packaged charts and rebuild index
         run: |
+          mkdir -p gh-pages
+          cp -r packaged/* gh-pages/
+          cd gh-pages
+          helm repo index . --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+
+      - name: Commit and push to gh-pages
+        run: |
+          cd gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add *.tgz index.yaml
+          git add .
           git commit -m "Update Helm repo index [skip ci]" || echo "No changes to commit"
-          git push origin main
+          git push origin gh-pages
