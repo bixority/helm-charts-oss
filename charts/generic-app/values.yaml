@@ -159,3 +159,10 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+imageCredentials:
+  name: gitlabregistrycreds
+  registry: docker.io
+  username: docker-token
+  password: token-secret
+  email: no-reply@no-reply.com
